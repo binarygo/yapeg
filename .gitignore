@@ -26,3 +26,10 @@
 *.exe
 *.out
 *.app
+*.tsk
+
+# Dirs
+tmp/
+
+# Temp files
+*~
