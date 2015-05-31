@@ -14,38 +14,69 @@ enum class RCode {
   , IGNORE
 };
 
-template<typename State>
-using Parser = std::function<RCode (State&, bool)>;
 // class State must have
 //   + Lexer
 //     - void setPos(auto)
 //     - auto getPos()
+//   + Cache
+//     - Any& cache()
+    
+template<typename State>
+using Parser = std::function<RCode (State&, bool)>;
     
 template<typename State>
 using Actor = std::function<void (State&)>;
-
+    
 // FUNCTIONS
+template<typename State>
+Parser<State> normalize(Parser<State> parser)
+{
+    return
+        [parser](State& state, bool must)->RCode
+        {
+            auto pos = state.getPos();
+            RCode rc = parser(state, must);
+            if(RCode::SUCCESS != rc)
+            {
+                state.setPos(pos);
+            }
+            return rc;
+        };
+}
+
 template<typename State>
 Parser<State> action(Actor<State> actor)
 {
     return
         [actor](State& state, bool must)->RCode
         {
+            auto pos = state.getPos();
             actor(state);
+            state.setPos(pos);
             return RCode::IGNORE;
         };
 }
 
-template<typename State>
-Parser<State> combo(Parser<State> parser, Actor<State> actor)
+template<typename State, typename CacheType, typename Ans>
+Parser<State> capture(Ans& ans)
 {
     return
-        [parser, actor](State& state, bool must)->RCode
+        [&ans](State& state, bool must)->RCode
         {
-            RCode rc = parser(state, must);
-            if(RCode::FAIL != rc) actor(state);
-            return rc;
+            ans = state.cache().template get<CacheType>();
+            return yapeg::RCode::IGNORE;
         };
+}
+
+template<typename State, typename Ans>
+RCode invoke(Parser<State> parser, State& state, bool must, Ans& ans)
+{
+    RCode rc = parser(state, must);
+    if(RCode::FAIL != rc)
+    {
+        state.cache().set(ans);
+    }
+    return rc;
 }
 
 template<typename State>
@@ -68,6 +99,18 @@ Parser<State> seq(const std::vector< Parser<State> >& parsers)
 }
 
 template<typename State>
+Parser<State> combo(Parser<State> parser1, Parser<State> parser2)
+{
+    return seq<State>({parser1, parser2});
+}
+
+template<typename State>
+Parser<State> combo(Parser<State> parser, Actor<State> actor)
+{
+    return combo<State>(parser, action(actor));
+}
+    
+template<typename State>
 Parser<State> choice(const std::vector< Parser<State> >& parsers)
 {
     return
@@ -75,36 +118,35 @@ Parser<State> choice(const std::vector< Parser<State> >& parsers)
         {
             for(auto it = parsers.begin(); it != parsers.end(); ++it)
             {
-                auto pos = state.getPos();
                 if(RCode::SUCCESS ==
                    (*it)(state, it+1 != parsers.end() ? false : must))
                 {
                     return RCode::SUCCESS;
                 }
-                else
-                {
-                    state.setPos(pos);
-                }
             }
             return RCode::FAIL;
         };
 }
+    
+template<typename State>
+Parser<State> choice(const std::vector< Parser<State> >& parsers, Parser<State> action)
+{
+    return seq<State>({choice<State>(parsers), action});
+}
 
+template<typename State>
+Parser<State> choice(const std::vector< Parser<State> >& parsers, Actor<State> actor)
+{
+    return choice(parsers, action(actor));
+}
+    
 template<typename State>
 Parser<State> star(Parser<State> parser)
 {
     return
         [parser](State& state, bool must)->RCode
         {
-            while(true)
-            {
-                auto pos = state.getPos();
-                if(RCode::FAIL == parser(state, false))
-                {
-                    state.setPos(pos);
-                    break;
-                }
-            }
+            while(RCode::FAIL != parser(state, false)) ;
             return RCode::SUCCESS;
         };
 }
@@ -121,11 +163,7 @@ Parser<State> qmark(Parser<State> parser)
     return
         [parser](State& state, bool must)->RCode
         {
-            auto pos = state.getPos();
-            if(RCode::FAIL == parser(state, false))
-            {
-                state.setPos(pos);
-            }
+            parser(state, false);
             return RCode::SUCCESS;
         };
 }

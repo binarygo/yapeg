@@ -25,11 +25,9 @@ private:
     // DATA
     std::size_t d_pos;
     std::vector<Token> d_tokens;
+    Any d_cache;
     
 public:
-    // DATA
-    Any reg;
-    
     // CREATORS
     State(std::initializer_list<Token> tokens)
         : d_pos(0)
@@ -46,6 +44,8 @@ public:
         assert(pos <= d_tokens.size());
         d_pos = pos;
     }
+
+    Any& cache() { return d_cache; }
     
     // ACCESSORS
     bool isValid() const
@@ -63,6 +63,8 @@ public:
         return d_pos;
     }
 
+    const Any& cache() const { return d_cache; }
+    
     std::size_t size() const
     {
         return d_tokens.size();
@@ -76,17 +78,15 @@ public:
 
 Parser<State> baseParser(const std::string& tokenType)
 {
-    return
-        [tokenType](State& state, bool must)->RCode
+    auto p =
+        [tokenType](State& s, bool must)->RCode
         {
-            std::size_t pos = state.getPos();
-            if(state.isValid() && state.token().first == tokenType)
+            if(s.isValid() && s.token().first == tokenType)
             {
-                state.reg.set(Token(state.token()));
-                state.next();
+                s.cache().set(Token(s.token()));
+                s.next();
                 return RCode::SUCCESS;
             }
-            state.setPos(pos);
             if(must)
             {
                 throw std::runtime_error(
@@ -94,9 +94,10 @@ Parser<State> baseParser(const std::string& tokenType)
             }
             return RCode::FAIL;
         };
+    return normalize<State>(p);
 }
 
-RCode dummyParser(State& state, bool must)
+RCode dummyParser(State& s, bool must)
 {
     return RCode::SUCCESS;
 }
@@ -119,18 +120,18 @@ TEST(Combinators, seq)
 
     RCode rc =
         seq<State>({
-            combo<State>(
-                baseParser("int"),
+            baseParser("int"),
+            action<State>(
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
-            combo<State>(
-                baseParser("float"),
+            baseParser("float"),
+            action<State>(
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             )
         })(state, true);
@@ -149,32 +150,32 @@ TEST(Combinators, choice)
 
     RCode rc =
         seq<State>({
-            combo<State>(
-                baseParser("int"),
+            baseParser("int"),
+            action<State>(
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             choice<State>({
                 combo<State>(
                     baseParser("double"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                     }
                 ),
                 combo<State>(
                     baseParser("float"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 ),
                 combo<State>(
                     baseParser("string"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 ),
@@ -183,22 +184,22 @@ TEST(Combinators, choice)
                 combo<State>(
                     baseParser("double"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 ),
                 combo<State>(
                     baseParser("float"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 ),
                 combo<State>(
                     baseParser("string"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[2]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[2]);
                     }
                 ),
             })
@@ -225,24 +226,24 @@ TEST(Combinators, star1)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             star<State>({
                 combo<State>(
                     baseParser("int"),
                     [&i](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i++]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i++]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[4]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[4]);
                 }
             )
         })(state, true);
@@ -266,24 +267,24 @@ TEST(Combinators, star2)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             star<State>({
                 combo<State>(
                     baseParser("int"),
                     [&i](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i++]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i++]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             )
         })(state, true);
@@ -310,24 +311,24 @@ TEST(Combinators, plus1)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             plus<State>({
                 combo<State>(
                     baseParser("int"),
                     [&i](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i++]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i++]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("string"),
                 [&i](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i]);
                 }
             )
         })(state, true);
@@ -352,24 +353,24 @@ TEST(Combinators, plus2)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             plus<State>({
                 combo<State>(
                     baseParser("int"),
                     [&i](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i++]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i++]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("string"),
                 [&i](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[i]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[i]);
                 }
             )
         })(state, true);
@@ -394,15 +395,15 @@ TEST(Combinators, plus3)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             ),
             plus<State>({
                 combo<State>(
                     baseParser("int"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 )
@@ -410,7 +411,7 @@ TEST(Combinators, plus3)
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
+                    std::cout << s.cache().get<Token>() << std::endl;
                     EXPECT_TRUE(0);
                 }
             )
@@ -433,24 +434,24 @@ TEST(Combinators, qmark1)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             qmark<State>({
                 combo<State>(
                     baseParser("int"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[2]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[2]);
                 }
             )
         })(state, true);
@@ -474,15 +475,15 @@ TEST(Combinators, qmark2)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             ),
             qmark<State>({
                 combo<State>(
                     baseParser("int"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
+                        std::cout << s.cache().get<Token>() << std::endl;
                         EXPECT_TRUE(0);
                     }
                 )
@@ -490,8 +491,8 @@ TEST(Combinators, qmark2)
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[2]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[2]);
                 }
             )
         })(state, false);
@@ -513,31 +514,31 @@ TEST(Combinators, ptest1)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             ptest<State>({
                 combo<State>(
                     baseParser("int"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                     }
                 )
             }),
             combo<State>(
                 baseParser("int"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             ),
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[2]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[2]);
                 }
             )
         })(state, true);
@@ -559,8 +560,8 @@ TEST(Combinators, ptest2)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             ptest<State>({
@@ -602,8 +603,8 @@ TEST(Combinators, ntest1)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             ntest<State>({
@@ -617,15 +618,15 @@ TEST(Combinators, ntest1)
             combo<State>(
                 baseParser("int"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                 }
             ),
             combo<State>(
                 baseParser("string"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[2]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[2]);
                 }
             )
         })(state, true);
@@ -647,16 +648,16 @@ TEST(Combinators, ntest2)
             combo<State>(
                 baseParser("double"),
                 [](State& s) {
-                    std::cout << s.reg.get<Token>() << std::endl;
-                    EXPECT_EQ(s.reg.get<Token>(), s.tokens()[0]);
+                    std::cout << s.cache().get<Token>() << std::endl;
+                    EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             ntest<State>({
                 combo<State>(
                     baseParser("float"),
                     [](State& s) {
-                        std::cout << s.reg.get<Token>() << std::endl;
-                        EXPECT_EQ(s.reg.get<Token>(), s.tokens()[1]);
+                        std::cout << s.cache().get<Token>() << std::endl;
+                        EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
                     }
                 )
             }),
