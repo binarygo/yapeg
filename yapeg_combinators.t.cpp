@@ -95,8 +95,23 @@ Parser<State> baseParser(const std::string& tokenType)
             return RCode::FAIL;
         };
 }
+
+RCode dummyParser(State& state, bool must)
+{
+    return RCode::SUCCESS;
+}
     
 } // close anonymous namespace
+
+TEST(Combinators, test)
+{
+    State state({ Token("int", "123"), Token("float", "99.9") });
+
+    RCode rc = seq<State>({dummyParser, dummyParser})(state, true);
+
+    EXPECT_EQ(rc, RCode::SUCCESS);
+    EXPECT_EQ(state.getPos(), 0u);
+}
     
 TEST(Combinators, seq)
 {

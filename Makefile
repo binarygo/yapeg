@@ -6,25 +6,32 @@ PROG=yapeg
 INCLUDES=-I.
 LD_FLAGS=
 
-IS_GTEST=yes
+get_objs = $(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(1)))
+
+# gtest
+GTEST_TARGET=$(PROG)_gtest.tsk
 GTEST_DIR=../gtest
+INCLUDES+=-I$(GTEST_DIR)/include
+LD_FLAGS+=-L$(GTEST_DIR)/build -lgtest -lgtest_main
+GTEST_SRCS=$(filter-out $(wildcard *.m.cpp), $(wildcard *.cpp)) $(wildcard *.c)
+GTEST_OBJS=$(call get_objs,$(GTEST_SRCS))
 
-ifeq (,$(IS_GTEST))
-	TASK=$(PROG).tsk
-	SRCS=$(filter-out $(wildcard *.t.cpp), $(wildcard *.cpp)) $(wildcard *.c)
-else
-	TASK=$(PROG)_gtest.tsk
-	INCLUDES+=-I$(GTEST_DIR)/include
-	LD_FLAGS+=-L$(GTEST_DIR)/build -lgtest -lgtest_main
-	SRCS=$(filter-out $(wildcard *.m.cpp), $(wildcard *.cpp)) $(wildcard *.c)
-endif
+# lib
+LIB_TARGET=lib$(PROG).a
+LIB_SRCS=$(filter-out $(wildcard *.t.cpp), $(wildcard *.cpp)) $(wildcard *.c)
+LIB_OBJS=$(call get_objs,$(LIB_SRCS))
 
-OBJS=$(patsubst %.cpp,%.o,$(patsubst %.c,%.o,$(SRCS)))
+.PHONY: gtest_build
+gtest_build: $(GTEST_TARGET)
 
-build: $(TASK)
+$(GTEST_TARGET): $(GTEST_OBJS)
+	$(CPPC) $(LD_FLAGS) $^ -o $@
 
-$(TASK): $(OBJS)
-	$(CPPC) $(LD_FLAGS) $(OBJS) -o $@
+.PHONY: lib_build
+lib_build: $(LIB_TARGET)
+
+$(LIB_TARGET): $(LIB_OBJS)
+	ar rcs $@ $^
 
 .cpp.o:
 	$(CPPC) -c -Wall $(INCLUDES) $< -o $@
@@ -32,5 +39,6 @@ $(TASK): $(OBJS)
 .c.o:
 	$(CC) -c $(INCLUDES) $< -o $@
 
+.PHONY: clean
 clean:
-	\rm -f *.o *.tsk
+	\rm -f *.o *.tsk *.a
