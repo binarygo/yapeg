@@ -88,6 +88,18 @@ private:
     void setSimpleCommon();
 
     template<typename T>
+    void setObjCommon(void* p)
+    {
+        assert(p);
+        destroy();
+        setTypeInfo<T>();
+        d_typeCategory = TypeCategory::OBJ;
+        d_data.p = p;
+        d_deleteFunc = &deleteT<T>;
+        d_cloneFunc = &cloneT<T>;
+    }
+    
+    template<typename T>
     void setTypeInfo()
     {
         d_typeInfo = &(typeid(T));
@@ -196,19 +208,15 @@ public:
         setSimpleCommon();
         d_data.ull = t;
     }
-    
+
     template<typename T>
     typename std::enable_if<any_impl::IsObj<T>::value, void>::type
     set(T&& t)
-    {
-        T* p = new T(std::forward<T>(t));
-        assert(p);
-        destroy();
-        setTypeInfo<T>();
-        d_typeCategory = TypeCategory::OBJ;
-        d_data.p = p;
-        d_deleteFunc = &deleteT<T>;
-        d_cloneFunc = &cloneT<T>;
+    {  
+        using RT =
+            typename std::remove_cv<
+                typename std::remove_reference<T>::type>::type;
+        setObjCommon<RT>(new RT(std::forward<T>(t)));
     }
 
     // ACCESSORS

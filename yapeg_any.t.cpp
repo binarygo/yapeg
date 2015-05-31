@@ -77,8 +77,8 @@ TEST(Any, clear)
 
     a.clear();
     EXPECT_TRUE(a.isNone());
-}    
-        
+}
+    
 TEST(Any, set_get_1)
 {
     Any a;
@@ -106,5 +106,13 @@ TEST(Any, set_get_3)
     EXPECT_THROW(a.get<int>(), Any::TypeMismatch);
 }
 
+TEST(Any, set_get_4)
+{
+    const Foo& foo(3);
+
+    Any a;
+    a.set(foo);
+}
+    
 } // close namespace yapeg
 
