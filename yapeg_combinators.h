@@ -11,7 +11,6 @@ namespace yapeg {
 enum class RCode {
     SUCCESS
   , FAIL
-  , IGNORE
 };
 
 // class State must have
@@ -45,27 +44,28 @@ Parser<State> normalize(Parser<State> parser)
 }
 
 template<typename State>
-Parser<State> action(Actor<State> actor)
+Parser<State> action(Actor<State> actor, RCode rc)
 {
     return
-        [actor](State& state, bool must)->RCode
+        [actor, rc](State& state, bool must)->RCode
         {
             auto pos = state.getPos();
             actor(state);
             state.setPos(pos);
-            return RCode::IGNORE;
+            return rc;
         };
 }
 
-template<typename State, typename CacheType, typename Ans>
-Parser<State> capture(Ans& ans)
+template<typename State>
+Parser<State> yaction(Actor<State> actor)
 {
-    return
-        [&ans](State& state, bool must)->RCode
-        {
-            ans = state.cache().template get<CacheType>();
-            return yapeg::RCode::IGNORE;
-        };
+    return action<State>(actor, RCode::SUCCESS);
+}
+
+template<typename State>
+Parser<State> naction(Actor<State> actor)
+{
+    return action<State>(actor, RCode::FAIL);
 }
 
 template<typename State, typename Ans>
@@ -99,15 +99,19 @@ Parser<State> seq(const std::vector< Parser<State> >& parsers)
 }
 
 template<typename State>
-Parser<State> combo(Parser<State> parser1, Parser<State> parser2)
-{
-    return seq<State>({parser1, parser2});
-}
-
-template<typename State>
 Parser<State> combo(Parser<State> parser, Actor<State> actor)
 {
-    return combo<State>(parser, action(actor));
+    return seq<State>({parser, yaction(actor)});
+}
+
+template<typename State, typename CacheType, typename Ans>
+Actor<State> capture(Ans& ans)
+{
+    return
+        [&ans](State& state)
+        {
+            ans = state.cache().template get<CacheType>();
+        };
 }
     
 template<typename State>
@@ -127,17 +131,11 @@ Parser<State> choice(const std::vector< Parser<State> >& parsers)
             return RCode::FAIL;
         };
 }
-    
-template<typename State>
-Parser<State> choice(const std::vector< Parser<State> >& parsers, Parser<State> action)
-{
-    return seq<State>({choice<State>(parsers), action});
-}
 
 template<typename State>
 Parser<State> choice(const std::vector< Parser<State> >& parsers, Actor<State> actor)
 {
-    return choice(parsers, action(actor));
+    return seq<State>({ choice<State>(parsers), yaction<State>(actor) });
 }
     
 template<typename State>

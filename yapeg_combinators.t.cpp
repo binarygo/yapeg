@@ -121,14 +121,14 @@ TEST(Combinators, seq)
     RCode rc =
         seq<State>({
             baseParser("int"),
-            action<State>(
+            yaction<State>(
                 [](State& s) {
                     std::cout << s.cache().get<Token>() << std::endl;
                     EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
                 }
             ),
             baseParser("float"),
-            action<State>(
+            yaction<State>(
                 [](State& s) {
                     std::cout << s.cache().get<Token>() << std::endl;
                     EXPECT_EQ(s.cache().get<Token>(), s.tokens()[1]);
@@ -151,7 +151,7 @@ TEST(Combinators, choice)
     RCode rc =
         seq<State>({
             baseParser("int"),
-            action<State>(
+            yaction<State>(
                 [](State& s) {
                     std::cout << s.cache().get<Token>() << std::endl;
                     EXPECT_EQ(s.cache().get<Token>(), s.tokens()[0]);
