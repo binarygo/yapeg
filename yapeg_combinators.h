@@ -7,6 +7,10 @@
 
 namespace yapeg {
 
+template<typename State>
+struct Combinators
+{
+    
 // TYPES
 enum class RCode {
     SUCCESS
@@ -20,15 +24,11 @@ enum class RCode {
 //   + Cache
 //     - Any& cache()
     
-template<typename State>
 using Parser = std::function<RCode (State&, bool)>;
-    
-template<typename State>
 using Actor = std::function<void (State&)>;
     
 // FUNCTIONS
-template<typename State>
-Parser<State> normalize(Parser<State> parser)
+static Parser normalize(Parser parser)
 {
     return
         [parser](State& state, bool must)->RCode
@@ -43,8 +43,7 @@ Parser<State> normalize(Parser<State> parser)
         };
 }
 
-template<typename State>
-Parser<State> action(Actor<State> actor, RCode rc)
+static Parser action(Actor actor, RCode rc)
 {
     return
         [actor, rc](State& state, bool must)->RCode
@@ -56,20 +55,18 @@ Parser<State> action(Actor<State> actor, RCode rc)
         };
 }
 
-template<typename State>
-Parser<State> yaction(Actor<State> actor)
+static Parser yaction(Actor actor)
 {
-    return action<State>(actor, RCode::SUCCESS);
+    return action(actor, RCode::SUCCESS);
 }
 
-template<typename State>
-Parser<State> naction(Actor<State> actor)
+static Parser naction(Actor actor)
 {
-    return action<State>(actor, RCode::FAIL);
+    return action(actor, RCode::FAIL);
 }
 
-template<typename State, typename Ans>
-RCode invoke(Parser<State> parser, State& state, bool must, Ans& ans)
+template<typename Ans>
+static RCode invoke(Parser parser, State& state, bool must, Ans& ans)
 {
     RCode rc = parser(state, must);
     if(RCode::FAIL != rc)
@@ -79,8 +76,17 @@ RCode invoke(Parser<State> parser, State& state, bool must, Ans& ans)
     return rc;
 }
 
-template<typename State>
-Parser<State> seq(const std::vector< Parser<State> >& parsers)
+template<typename CacheType, typename Ans>
+static Actor capture(Ans& ans)
+{
+    return
+        [&ans](State& state)
+        {
+            ans = state.cache().template get<CacheType>();
+        };
+}
+    
+static Parser seq(const std::vector<Parser>& parsers)
 {
     return
         [parsers](State& state, bool must)->RCode
@@ -98,24 +104,12 @@ Parser<State> seq(const std::vector< Parser<State> >& parsers)
         };
 }
 
-template<typename State>
-Parser<State> combo(Parser<State> parser, Actor<State> actor)
+static Parser combo(Parser parser, Actor actor)
 {
-    return seq<State>({parser, yaction(actor)});
-}
-
-template<typename State, typename CacheType, typename Ans>
-Actor<State> capture(Ans& ans)
-{
-    return
-        [&ans](State& state)
-        {
-            ans = state.cache().template get<CacheType>();
-        };
+    return seq({parser, yaction(actor)});
 }
     
-template<typename State>
-Parser<State> choice(const std::vector< Parser<State> >& parsers)
+static Parser choice(const std::vector<Parser>& parsers)
 {
     return
         [parsers](State& state, bool must)->RCode
@@ -132,14 +126,12 @@ Parser<State> choice(const std::vector< Parser<State> >& parsers)
         };
 }
 
-template<typename State>
-Parser<State> choice(const std::vector< Parser<State> >& parsers, Actor<State> actor)
+static Parser choice(const std::vector<Parser>& parsers, Actor actor)
 {
-    return seq<State>({ choice<State>(parsers), yaction<State>(actor) });
+    return seq({ choice(parsers), yaction(actor) });
 }
     
-template<typename State>
-Parser<State> star(Parser<State> parser)
+static Parser star(Parser parser)
 {
     return
         [parser](State& state, bool must)->RCode
@@ -149,14 +141,12 @@ Parser<State> star(Parser<State> parser)
         };
 }
 
-template<typename State>
-Parser<State> plus(Parser<State> parser)
+static Parser plus(Parser parser)
 {
-    return seq<State>({parser, star<State>(parser)});
+    return seq({parser, star(parser)});
 }
 
-template<typename State>
-Parser<State> qmark(Parser<State> parser)
+static Parser qmark(Parser parser)
 {
     return
         [parser](State& state, bool must)->RCode
@@ -166,8 +156,7 @@ Parser<State> qmark(Parser<State> parser)
         };
 }
 
-template<typename State>
-Parser<State> ptest(Parser<State> parser)
+static Parser ptest(Parser parser)
 {
     return
         [parser](State& state, bool must)->RCode
@@ -181,8 +170,7 @@ Parser<State> ptest(Parser<State> parser)
         };
 }
 
-template<typename State>
-Parser<State> ntest(Parser<State> parser)
+static Parser ntest(Parser parser)
 {
     return
         [parser](State& state, bool must)->RCode
@@ -195,7 +183,9 @@ Parser<State> ntest(Parser<State> parser)
                 RCode::FAIL : RCode::SUCCESS;
         };
 }
- 
+
+}; // close struct Combinators
+    
 } // close namespace yapeg
 
 #endif // INCLUDED_YAPEG_COMBINATORS_H
